@@ -7,7 +7,5 @@
 # Local R environment
 .Rprofile
 renv/
-renv.lock
-
 # Data
 data/
