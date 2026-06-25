@@ -1,0 +1,13 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.positai
+
+# Local R environment
+.Rprofile
+renv/
+renv.lock
+
+# Data
+data/
