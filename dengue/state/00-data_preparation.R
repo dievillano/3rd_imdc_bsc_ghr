@@ -6,8 +6,9 @@ names(raw_data_filepaths) <- fs::path_file(raw_data_filepaths)
 
 interim_data_path <- fs::path(data_path, "interim/health_region")
 processed_data_path <- fs::path(data_path, "processed/health_region")
-processed_shp_path <- fs::path(processed_data_path, "shp")
-processed_graph_path <- fs::path(processed_data_path, "graph")
+resources_path <- fs::path("resources/health_region")
+shp_path <- fs::path(resources_path, "shp")
+graph_path <- fs::path(resources_path, "graph")
 
 utils_path <- fs::path(sprint2026_path, "utils")
 utils_filepaths <- fs::dir_ls(utils_path)
@@ -75,7 +76,7 @@ hr_shp <- hr_shp_raw |>
 ggplot2::ggplot() +
   ggplot2::geom_sf(data = hr_shp)
 
-saveRDS(hr_shp, fs::path(processed_shp_path, "hr_shapefile.rds"))
+saveRDS(hr_shp, fs::path(shp_path, "hr_shapefile.rds"))
 
 hr_shp_clean <- hr_shp |>
   sf::st_make_valid() |> 
@@ -84,7 +85,7 @@ hr_shp_clean <- hr_shp |>
 hr_nb <- spdep::poly2nb(hr_shp_clean, queen = TRUE)
 
 spdep::nb2INLA(
-  file = fs::path(processed_graph_path, "hr_graph.graph"),
+  file = fs::path(graph_path, "hr_graph.graph"),
   hr_nb
 )
 
