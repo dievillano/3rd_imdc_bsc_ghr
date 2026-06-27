@@ -5,7 +5,7 @@ processed_data_path <- fs::path(data_path, "processed/health_region")
 internal_splits_path <- fs::path(processed_data_path, "internal_splits")
 
 dengue_path <- fs::path(sprint2026_path, "dengue/state")
-screening_path <- fs::path(dengue_path, "results/screening")
+screening_path <- fs::path(dengue_path, "outputs/screening")
 
 utils_path <- fs::path(sprint2026_path, "utils")
 utils_filepaths <- fs::dir_ls(utils_path)

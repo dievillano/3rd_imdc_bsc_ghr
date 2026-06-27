@@ -7,5 +7,12 @@
 # Local R environment
 .Rprofile
 renv/
+
 # Data
 data/
+
+# Logs
+logs/
+
+# Generated outputs
+outputs/
