@@ -16,3 +16,7 @@ logs/
 
 # Generated outputs
 outputs/
+
+# Climate
+climate/out_files/
+climate/temp_files/
