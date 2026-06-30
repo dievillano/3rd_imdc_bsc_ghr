@@ -26,3 +26,6 @@ climate/temp_files/
 
 # env
 .env
+
+# HTML outputs
+*.html
