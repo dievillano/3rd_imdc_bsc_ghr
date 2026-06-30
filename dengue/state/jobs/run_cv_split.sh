@@ -10,6 +10,8 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=diego.villa@bsc.es
 
+mkdir -p logs
+
 module use /gpfs/projects/bsc32/software/rhel/9.2/modules/all
 module load R-bundle-Bioconductor/3.18-foss-2023b-R-4.3.3
 module load R-bundle-CRAN/2023.12-foss-2023b

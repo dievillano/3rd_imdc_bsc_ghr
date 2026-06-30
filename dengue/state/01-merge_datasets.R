@@ -12,6 +12,10 @@ processed_data_path <- fs::path(data_path, "processed/health_region")
 internal_splits_path <- fs::path(processed_data_path, "internal_splits")
 external_splits_path <- fs::path(processed_data_path, "external_splits")
 
+fs::dir_create(processed_data_path)
+fs::dir_create(internal_splits_path)
+fs::dir_create(external_splits_path)
+
 utils_path <- fs::path(sprint2026_path, "utils")
 utils_filepaths <- fs::dir_ls(utils_path)
 purrr::walk(utils_filepaths, source)
@@ -99,66 +103,6 @@ nino_year <- climate |>
 
 # 1.2 Lags ----------------------------------------------------------------
 
-# raw_vars <- grep(
-#   "^(temp|precip|rel_humid).*_weight$", 
-#   names(climate), 
-#   value = TRUE
-# )
-
-# anom_vars <- grep(
-#   "^(temp|precip|rel_humid).*_anom$",
-#   names(climate),
-#   value = TRUE
-# )
-
-# rolling_vars <- grep(
-#   "^(temp|precip|rel_humid).*_(rollmean)_",
-#   names(climate),
-#   value = TRUE
-# )
-
-# secondary_vars <- c(
-#   "thermal_range_weight", 
-#   "rainy_days_weight"
-# )
-
-# raw_lags <- c(4, 8, 12)
-# anom_lags <- c(4, 8, 12)
-# roll_lags <- c(4, 8)
-# secondary_lags <- c(4, 8)
-
-# climate_lag <- GHRmodel::lag_cov(
-#   data = climate,
-#   name = raw_vars,
-#   time = "date",
-#   group = "regional_geocode",
-#   lag = raw_lags
-# )
-
-# climate_lag <- GHRmodel::lag_cov(
-#   data = climate_lag,
-#   name = anom_vars,
-#   time = "date",
-#   group = "regional_geocode",
-#   lag = anom_lags
-# )
-
-# climate_lag <- GHRmodel::lag_cov(
-#   data = climate_lag,
-#   name = rolling_vars,
-#   time = "date",
-#   group = "regional_geocode",
-#   lag = roll_lags
-# )
-
-# climate_lag <- GHRmodel::lag_cov(
-#   data = climate_lag,
-#   name = secondary_vars,
-#   time = "date",
-#   group = "regional_geocode",
-#   lag = secondary_lags
-# )
-
 id_vars <- c(
   "month", "year", "regional_geocode", "regional_name", "date"
 )
@@ -185,29 +129,6 @@ climate_lag <- climate |>
   dplyr::ungroup() |> 
   dplyr::select(-date)
 
-# 2. Ocean dataset --------------------------------------------------------
-
-# ocean_raw <- readRDS(interim_data_filepaths["ocean.rds"])
-
-# ocean_lags <- c(4, 8, 12, 24)
-
-# ocean_vars <- c("enso", "iod", "pdo")
-
-# ocean_lag <- GHRmodel::lag_cov(
-#   data = ocean_raw,
-#   name = ocean_vars,
-#   time = "date",
-#   lag = ocean_lags
-# )
-
-# ocean_lag_cols <- grep("\\.l[0-9]+$", names(ocean_lag), value = TRUE)
-
-# ocean_lag <- ocean_lag |> 
-#   dplyr::rename_with(
-#     ~ gsub("\\.l([0-9]+)$", "_lag_\\1", .x),
-#     .cols = tidyselect::all_of(ocean_lag_cols)
-#   )
-
 # 3. Environmental dataset ------------------------------------------------
 
 environ <- readRDS(interim_data_filepaths["environ_hr.rds"])
@@ -220,10 +141,62 @@ population <- readRDS(interim_data_filepaths["population_hr.rds"])
 
 dengue_raw <- readRDS(interim_data_filepaths["dengue_hr.rds"])
 
-dengue  <- dengue_raw |> 
+last_date <- as.Date("2026-10-04")  # Sunday of EW40 2026
+
+future_dates <- seq(
+  from = max(dengue_raw$date) + 7,
+  to = last_date,
+  by = "week"
+)
+
+future_epiweeks <- seq(
+  from = max(dengue_raw$epiweek) + 1L,
+  to = 202640L,
+  by = 1L
+)
+
+stopifnot(length(future_dates) == length(future_epiweeks))
+
+ids <- dengue_raw |>
+  dplyr::distinct(
+    uf_code,
+    uf,
+    regional_geocode
+  )
+
+future_rows <- tidyr::expand_grid(
+  ids,
+  tibble::tibble(
+    date = future_dates,
+    epiweek = future_epiweeks
+  )
+) |>
+  dplyr::mutate(
+    cases = NA_real_,
+
+    train_1 = FALSE,
+    train_2 = FALSE,
+    train_3 = FALSE,
+    train_4 = FALSE,
+
+    target_1 = FALSE,
+    target_2 = FALSE,
+    target_3 = FALSE,
+    target_4 = TRUE
+  ) |>
+  dplyr::select(dplyr::all_of(names(dengue_raw)))
+
+dengue <- dplyr::bind_rows(
+  dengue_raw,
+  future_rows
+) |>
   dplyr::mutate(
     month = lubridate::month(date + 3),
     year = lubridate::year(date + 3)
+  ) |>
+  dplyr::arrange(
+    regional_geocode,
+    date
   )
 
 # 6. Merge datasets -------------------------------------------------------
@@ -321,30 +294,6 @@ external_splits <- split_metadata |>
     }
   )
 
-# split_metadata <- get_split_metadata(data) |>
-#   dplyr::left_join(
-#     forecast_lookup,
-#     by = "split_id"
-#   )
-
-# external_splits <- split_metadata |>
-#   split(.$split_id) |>
-#   purrr::map(
-#     \(split_row) {
-
-#       data_split <- make_external_dataset(
-#         data = data,
-#         forecast_file = split_row$forecast_file
-#       )
-
-#       get_split(
-#         data = data_split,
-#         date_col = date,
-#         split_row = dplyr::select(split_row, -forecast_file)
-#       )
-#     }
-#   )
-
 saveRDS(
   external_splits,
   fs::path(
@@ -352,50 +301,6 @@ saveRDS(
     "dengue_hr_external_splits.rds"
   )
 )
-
-# split_metadata <- get_split_metadata(data)
-# split_metadata
-
-# external_splits <- split_metadata |>
-#   split(seq_len(nrow(split_metadata))) |>
-#   purrr::map(
-#     \(x) get_split(
-#       data = data,
-#       date_col = date,
-#       split_row = x
-#     )
-#   )
-
-# saveRDS(
-#   external_splits,
-#   fs::path(external_splits_path, "dengue_hr_external_splits.rds")
-# )
-
-# rm(external_splits)
-# gc()
-
-# internal_split_plan <- make_internal_split_plan(
-#   data = data,
-#   cutoff_years = c(2019, 2020, 2021)
-# )
-
-# internal_splits <- internal_split_plan |>
-#   split(seq_len(nrow(internal_split_plan))) |>
-#   purrr::map(
-#     \(x) get_split(
-#       data = data,
-#       date_col = date,
-#       split_row = x
-#     )
-#   )
-
-# saveRDS(
-#   internal_splits,
-#   fs::path(internal_splits_path, "dengue_hr_internal_splits.rds")
-# )
-
-# rm(internal_splits)
-# gc()
 
 internal_split_plan <- make_internal_split_plan(
   data = data,

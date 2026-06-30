@@ -4,6 +4,9 @@ dengue_path <- fs::path(sprint2026_path, "dengue/state")
 state_scores_path  <- fs::path(dengue_path, "outputs/cv_scores_state")
 state_matrics_path  <- fs::path(dengue_path, "outputs/cv_metrics_state")
 
+fs::dir_create(state_scores_path)
+fs::dir_create(state_matrics_path)
+
 utils_path <- fs::path(sprint2026_path, "utils")
 utils_filepaths <- fs::dir_ls(utils_path)
 purrr::walk(utils_filepaths, source)

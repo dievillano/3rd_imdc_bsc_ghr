@@ -15,6 +15,8 @@ library(scoringutils)
 dengue_path <- fs::path(sprint2026_path, "dengue/state")
 state_scores_path  <- fs::path(dengue_path, "outputs/cv_scores_state")
 
+fs::dir_create(state_scores_path)
+
 wis_quantiles <- c(
   0.025, 0.05, 0.10, 0.25,
   0.50,

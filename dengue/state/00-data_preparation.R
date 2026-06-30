@@ -14,6 +14,12 @@ resources_path <- fs::path("resources/health_region")
 shp_path <- fs::path(resources_path, "shp")
 graph_path <- fs::path(resources_path, "graph")
 
+fs::dir_create(interim_data_path)
+fs::dir_create(processed_data_path)
+fs::dir_create(resources_path)
+fs::dir_create(shp_path)
+fs::dir_create(graph_path)
+
 utils_path <- fs::path(sprint2026_path, "utils")
 utils_filepaths <- fs::dir_ls(utils_path)
 purrr::walk(utils_filepaths, source)
@@ -47,6 +53,11 @@ drop_state <- 32
 geocode_regional_uf_join <- map_regional_health_raw |> 
   dplyr::filter(uf_code != drop_state) |> 
   dplyr::select(uf, uf_code, regional_geocode, geocode)
+
+saveRDS(
+  geocode_regional_uf_join,
+  fs::path(resources_path, "geocode_lookup_table.rds")
+)
 
 # 2. Shape files ----------------------------------------------------------
 

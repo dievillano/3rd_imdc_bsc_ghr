@@ -14,6 +14,9 @@ dengue_path <- fs::path(sprint2026_path, "dengue/state")
 hr_predictions_path <- fs::path(dengue_path, "outputs/cv_predictions")
 state_predictions_path <- fs::path(dengue_path, "outputs/cv_predictions_state")
 
+fs::dir_create(hr_predictions_path)
+fs::dir_create(state_predictions_path)
+
 model_specs_path <- fs::path(dengue_path, "outputs/model_specs")
 
 utils_path <- fs::path(sprint2026_path, "utils")

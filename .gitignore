@@ -15,7 +15,10 @@ data/
 logs/
 
 # Generated outputs
-outputs/
+dengue/state/outputs/*
+
+!dengue/state/outputs/val_submission/
+!dengue/state/outputs/val_submission/**
 
 # Climate
 climate/out_files/

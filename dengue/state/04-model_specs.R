@@ -2,7 +2,9 @@
 sprint2026_path <- here::here()
 
 dengue_path <- fs::path(sprint2026_path, "dengue/state")
+
 model_specs_path <- fs::path(dengue_path, "outputs/model_specs")
+fs::dir_create(model_specs_path)
 
 utils_path <- fs::path(sprint2026_path, "utils")
 utils_filepaths <- fs::dir_ls(utils_path)
