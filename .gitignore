@@ -23,3 +23,6 @@ dengue/state/outputs/*
 # Climate
 climate/out_files/
 climate/temp_files/
+
+# env
+.env
