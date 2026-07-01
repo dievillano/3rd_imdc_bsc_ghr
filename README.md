@@ -28,9 +28,6 @@ Barcelona Supercomputing Center (BSC), Spain
 Catalan Institution for Research and Advanced Studies (ICREA), Spain\
 London School of Hygiene and Tropical Medicine, United Kingdom
 
-::: {align="justify"}
-:::
-
 ## Repository Structure
 
 | Directory / File           | Description                                                                                                                                                                                     |
