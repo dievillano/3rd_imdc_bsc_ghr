@@ -23,6 +23,18 @@
 #   - Interaction terms are created AFTER scaling, via add_model_vars().
 # =============================================================================
 
+inla_lib <- Sys.getenv("EBROOTRMININLA")
+
+if (
+  nzchar(inla_lib) &&
+  dir.exists(file.path(inla_lib, "INLA"))
+) {
+  .libPaths(c(inla_lib, .libPaths()))
+}
+
+cat("INLA library:", find.package("INLA"), "\n")
+cat("INLA version:", as.character(packageVersion("INLA")), "\n")
+INLA::inla.version()
 
 # =============================================================================
 # 0. Paths and configuration
@@ -85,7 +97,7 @@ purrr::walk(
   source
 )
 
-setup_hpc_library()
+# setup_hpc_library()
 
 
 # Input files ------------------------------------------------------------------
