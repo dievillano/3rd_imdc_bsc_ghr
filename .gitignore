@@ -1,0 +1,37 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.positai
+
+# Local R environment
+.Rprofile
+renv/
+
+# Ignore all data
+data/
+
+# Logs
+logs/
+
+# Generated outputs
+dengue/state/outputs/*
+
+!dengue/state/outputs/val_submission/
+!dengue/state/outputs/val_submission/**
+
+# Climate
+climate/out_files/
+climate/temp_files/
+
+# env
+.env
+
+# HTML outputs
+*.html
+
+# Report
+_freeze/
+_site/
+/.quarto/
+**/*.quarto_ipynb
