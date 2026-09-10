@@ -1,0 +1,65 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "3rd IMDC 2026 Dengue Forecasts",
+    "section": "",
+    "text": "This report summarizes the BSC-GHR legacy dengue model used for the 3rd IMDC 2026 forecasting challenge. It brings the validation and production rounds into one report, with observed cases where available, predictive medians, and posterior predictive uncertainty intervals.\n\n\n\n\n\n\nNoteCountry-wide aggregation\n\n\n\nThe country-wide series is the sum of the 26 federative units included in the submitted model. Espírito Santo (UF 32) is not included, so the country-wide figures should be interpreted as the aggregate of the modelled units rather than a complete Brazil total.\n\n\nThe production forecast covers 52 weeks, from 11 October 2026 to 03 October 2027, with 1000 posterior predictive draws per state-week. The submitted model is tied to Git commit b3af423fbf2f714612e6b8d4061daafa5bfda83c.\n\n\n\n\nShow code\nvalidation_rounds |&gt;\n  dplyr::mutate(\n    split = paste(\"Split\", .split_id),\n    start = format(start, \"%Y-%m-%d\"),\n    end = format(end, \"%Y-%m-%d\")\n  ) |&gt;\n  dplyr::select(split, start, end, weeks) |&gt;\n  gt::gt() |&gt;\n  gt::cols_label(\n    split = \"Validation round\",\n    start = \"Start\",\n    end = \"End\",\n    weeks = \"Weeks\"\n  ) |&gt;\n  gt::tab_options(table.width = gt::pct(75))\n\n\n\n\n\n\n\n\nValidation round\nStart\nEnd\nWeeks\n\n\n\n\nSplit 1\n2022-10-09\n2023-10-01\n52\n\n\nSplit 2\n2023-10-08\n2024-09-29\n52\n\n\nSplit 3\n2024-10-06\n2025-09-28\n52\n\n\nSplit 4\n2025-10-05\n2026-03-08\n23"
+  },
+  {
+    "objectID": "index.html#validation-windows",
+    "href": "index.html#validation-windows",
+    "title": "3rd IMDC 2026 Dengue Forecasts",
+    "section": "",
+    "text": "Show code\nvalidation_rounds |&gt;\n  dplyr::mutate(\n    split = paste(\"Split\", .split_id),\n    start = format(start, \"%Y-%m-%d\"),\n    end = format(end, \"%Y-%m-%d\")\n  ) |&gt;\n  dplyr::select(split, start, end, weeks) |&gt;\n  gt::gt() |&gt;\n  gt::cols_label(\n    split = \"Validation round\",\n    start = \"Start\",\n    end = \"End\",\n    weeks = \"Weeks\"\n  ) |&gt;\n  gt::tab_options(table.width = gt::pct(75))\n\n\n\n\n\n\n\n\nValidation round\nStart\nEnd\nWeeks\n\n\n\n\nSplit 1\n2022-10-09\n2023-10-01\n52\n\n\nSplit 2\n2023-10-08\n2024-09-29\n52\n\n\nSplit 3\n2024-10-06\n2025-09-28\n52\n\n\nSplit 4\n2025-10-05\n2026-03-08\n23"
+  },
+  {
+    "objectID": "index.html#predictive-performance",
+    "href": "index.html#predictive-performance",
+    "title": "3rd IMDC 2026 Dengue Forecasts",
+    "section": "Predictive performance",
+    "text": "Predictive performance\nThe table reports point accuracy for the predictive median and empirical coverage of the predictive intervals. Country-week metrics evaluate the aggregate of the modelled units; state-week metrics pool all state-week observations within each validation round.\n\n\nShow code\nmetrics |&gt;\n  dplyr::mutate(\n    split = paste(\"Split\", .split_id),\n    mae = round(mae, 1),\n    rmse = round(rmse, 1),\n    dplyr::across(dplyr::starts_with(\"coverage_\"), ~ round(100 * .x, 1))\n  ) |&gt;\n  dplyr::select(\n    split, level, n, mae, rmse,\n    coverage_50, coverage_80, coverage_90, coverage_95\n  ) |&gt;\n  gt::gt(groupname_col = \"split\") |&gt;\n  gt::cols_label(\n    level = \"Level\",\n    n = \"N\",\n    mae = \"MAE\",\n    rmse = \"RMSE\",\n    coverage_50 = \"50% coverage\",\n    coverage_80 = \"80% coverage\",\n    coverage_90 = \"90% coverage\",\n    coverage_95 = \"95% coverage\"\n  ) |&gt;\n  gt::fmt_number(columns = c(mae, rmse), decimals = 1) |&gt;\n  gt::fmt_number(\n    columns = dplyr::starts_with(\"coverage_\"),\n    decimals = 1,\n    pattern = \"{x}%\"\n  )\n\n\n\n\n\n\n\n\nLevel\nN\nMAE\nRMSE\n50% coverage\n80% coverage\n90% coverage\n95% coverage\n\n\n\n\nSplit 1\n\n\nCountry-week\n52\n13,411.0\n23,214.9\n40.4%\n86.5%\n100.0%\n100.0%\n\n\nState-week\n1352\n788.4\n2,627.5\n40.8%\n70.9%\n82.2%\n87.6%\n\n\nSplit 2\n\n\nCountry-week\n52\n87,303.4\n138,612.7\n25.0%\n48.1%\n63.5%\n80.8%\n\n\nState-week\n1352\n3,901.4\n14,840.8\n31.4%\n57.7%\n71.8%\n78.7%\n\n\nSplit 3\n\n\nCountry-week\n52\n8,167.1\n10,973.8\n71.2%\n86.5%\n100.0%\n100.0%\n\n\nState-week\n1352\n984.3\n2,975.7\n28.4%\n53.3%\n65.7%\n75.1%\n\n\nSplit 4\n\n\nCountry-week\n23\n11,808.7\n17,832.1\n47.8%\n60.9%\n91.3%\n95.7%\n\n\nState-week\n598\n472.7\n1,373.9\n37.5%\n68.2%\n82.1%\n88.6%"
+  },
+  {
+    "objectID": "index.html#country-wide-validation",
+    "href": "index.html#country-wide-validation",
+    "title": "3rd IMDC 2026 Dengue Forecasts",
+    "section": "Country-wide validation",
+    "text": "Country-wide validation\n\n\nShow code\nplot_forecast(validation_country, observed = TRUE) +\n  facet_wrap(~ split_label, ncol = 2, scales = \"free_x\") +\n  labs(\n    title = \"Country-wide validation forecasts\",\n    subtitle = \"Health-region posterior predictive draws aggregated draw-by-draw\"\n  )"
+  },
+  {
+    "objectID": "index.html#total-cases-over-each-validation-horizon",
+    "href": "index.html#total-cases-over-each-validation-horizon",
+    "title": "3rd IMDC 2026 Dengue Forecasts",
+    "section": "Total cases over each validation horizon",
+    "text": "Total cases over each validation horizon\nThe table compares observed and predicted total cases over each validation horizon. Predictive intervals are calculated by summing the posterior predictive draws across all modelled health regions and weeks before taking quantiles.\n\n\nShow code\nvalidation_country_totals |&gt;\n  dplyr::mutate(\n    split = paste(\"Split\", .split_id),\n    observed = round(cases),\n    median = round(pred),\n    interval_95 = paste0(\n      scales::comma(round(lower_95)),\n      \" – \",\n      scales::comma(round(upper_95))\n    )\n  ) |&gt;\n  dplyr::select(split, observed, median, interval_95) |&gt;\n  gt::gt() |&gt;\n  gt::cols_label(\n    split = \"Validation round\",\n    observed = \"Observed cases\",\n    median = \"Predicted median\",\n    interval_95 = \"95% predictive interval\"\n  ) |&gt;\n  gt::fmt_number(columns = c(observed, median), decimals = 0, use_seps = TRUE)\n\n\n\n\n\n\n\n\nValidation round\nObserved cases\nPredicted median\n95% predictive interval\n\n\n\n\nSplit 1\n1,490,493\n821,790\n239,588 – 2,658,328\n\n\nSplit 2\n6,700,498\n2,189,864\n739,274 – 6,350,607\n\n\nSplit 3\n1,770,400\n2,212,675\n1,059,376 – 4,458,984\n\n\nSplit 4\n233,666\n493,424\n147,093 – 1,600,178"
+  },
+  {
+    "objectID": "index.html#state-level-validation",
+    "href": "index.html#state-level-validation",
+    "title": "3rd IMDC 2026 Dengue Forecasts",
+    "section": "State-level validation",
+    "text": "State-level validation\nThe vertical scale is allowed to vary by state so that both high- and low-incidence states remain readable.\n\nSplit 1Split 2Split 3Split 4\n\n\n\n\nShow code\nplot_states(\n  validation_state |&gt; dplyr::filter(.split_id == 1L),\n  observed = TRUE,\n  title = \"Validation split 1\"\n)\n\n\n\n\n\n\n\n\n\n\n\n\n\nShow code\nplot_states(\n  validation_state |&gt; dplyr::filter(.split_id == 2L),\n  observed = TRUE,\n  title = \"Validation split 2\"\n)\n\n\n\n\n\n\n\n\n\n\n\n\n\nShow code\nplot_states(\n  validation_state |&gt; dplyr::filter(.split_id == 3L),\n  observed = TRUE,\n  title = \"Validation split 3\"\n)\n\n\n\n\n\n\n\n\n\n\n\n\n\nShow code\nplot_states(\n  validation_state |&gt; dplyr::filter(.split_id == 4L),\n  observed = TRUE,\n  title = \"Validation split 4\"\n)"
+  },
+  {
+    "objectID": "index.html#country-wide-forecast",
+    "href": "index.html#country-wide-forecast",
+    "title": "3rd IMDC 2026 Dengue Forecasts",
+    "section": "Country-wide forecast",
+    "text": "Country-wide forecast\n\n\nShow code\nplot_forecast(\n  production_country,\n  observed = FALSE,\n  title = \"Country-wide production forecast\",\n  subtitle = \"Aggregate of the 26 modelled federative units\"\n)\n\n\n\n\n\n\n\n\n\nAcross the full forecast horizon, the model projects a median of 1,804,442 cases, with a 95% posterior predictive interval of 755,475–4,231,617 cases, for the 26 modelled units combined."
+  },
+  {
+    "objectID": "index.html#state-forecasts",
+    "href": "index.html#state-forecasts",
+    "title": "3rd IMDC 2026 Dengue Forecasts",
+    "section": "State forecasts",
+    "text": "State forecasts\n\n\nShow code\nplot_states(\n  production_state,\n  observed = FALSE,\n  title = \"State-level production forecasts\"\n)"
+  },
+  {
+    "objectID": "index.html#projected-burden-by-state",
+    "href": "index.html#projected-burden-by-state",
+    "title": "3rd IMDC 2026 Dengue Forecasts",
+    "section": "Projected burden by state",
+    "text": "Projected burden by state\nThis figure summarizes total cases over the full forecast horizon. The intervals are again calculated from draw-by-draw sums across weeks.\n\n\nShow code\nproduction_state_totals |&gt;\n  dplyr::mutate(uf = forcats::fct_reorder(uf, pred)) |&gt;\n  ggplot(aes(x = uf, y = pred)) +\n  geom_linerange(\n    aes(ymin = lower_95, ymax = upper_95),\n    linewidth = 0.45,\n    colour = \"#93C5FD\"\n  ) +\n  geom_linerange(\n    aes(ymin = lower_50, ymax = upper_50),\n    linewidth = 2.2,\n    colour = \"#3B82F6\"\n  ) +\n  geom_point(size = 2, colour = \"#1D4ED8\") +\n  coord_flip() +\n  scale_y_continuous(labels = scales::label_comma()) +\n  labs(\n    title = \"Projected dengue cases over the forecast horizon\",\n    subtitle = \"Point: median; thick line: 50% interval; thin line: 95% interval\",\n    x = NULL,\n    y = \"Total forecast cases\"\n  ) +\n  theme_minimal(base_size = 11) +\n  theme(panel.grid.minor = element_blank())\n\n\n\n\n\n\n\n\n\n\n\nShow code\nproduction_state_totals |&gt;\n  dplyr::arrange(dplyr::desc(pred)) |&gt;\n  dplyr::mutate(\n    median = round(pred),\n    interval_95 = paste0(\n      scales::comma(round(lower_95)),\n      \" – \",\n      scales::comma(round(upper_95))\n    )\n  ) |&gt;\n  dplyr::select(uf, median, interval_95) |&gt;\n  gt::gt() |&gt;\n  gt::cols_label(\n    uf = \"State\",\n    median = \"Median total cases\",\n    interval_95 = \"95% predictive interval\"\n  ) |&gt;\n  gt::fmt_number(columns = median, decimals = 0, use_seps = TRUE)\n\n\n\n\n\n\n\n\nState\nMedian total cases\n95% predictive interval\n\n\n\n\nSP\n388,547\n163,407 – 922,857\n\n\nMG\n294,050\n118,851 – 682,781\n\n\nGO\n263,184\n106,806 – 634,584\n\n\nRJ\n127,638\n49,467 – 310,066\n\n\nBA\n95,489\n38,611 – 230,200\n\n\nPR\n80,236\n32,344 – 194,102\n\n\nPE\n64,366\n25,873 – 162,076\n\n\nCE\n61,984\n24,767 – 154,701\n\n\nMT\n47,251\n19,119 – 115,005\n\n\nMS\n42,728\n17,446 – 105,113\n\n\nRN\n39,850\n16,408 – 96,947\n\n\nDF\n39,057\n14,498 – 109,471\n\n\nAL\n31,464\n12,348 – 76,552\n\n\nPB\n30,532\n12,378 – 72,670\n\n\nAM\n25,708\n10,149 – 64,451\n\n\nSC\n24,777\n10,070 – 62,402\n\n\nPI\n24,762\n9,438 – 62,764\n\n\nTO\n20,598\n8,476 – 49,069\n\n\nAC\n19,202\n7,183 – 46,973\n\n\nPA\n18,822\n7,943 – 45,199\n\n\nRS\n16,994\n7,114 – 44,581\n\n\nMA\n15,882\n6,273 – 38,370\n\n\nRO\n8,858\n3,511 – 21,394\n\n\nSE\n6,276\n2,585 – 15,179\n\n\nAP\n3,629\n1,429 – 8,890\n\n\nRR\n3,217\n1,293 – 8,091"
+  }
+]
