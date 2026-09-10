@@ -74,7 +74,7 @@ production_state_path <- fs::path(
   "legacy_model_state_predictions.rds"
 )
 
-model_commit <- "54002fa44dbee5a38e7c7fd97107b11d1d945fe7"
+model_commit <- "b3af423fbf2f714612e6b8d4061daafa5bfda83c"
 
 # Brazil geofacet grid ------------------------------------------------------
 # Define the grid explicitly rather than relying on geofacet's bundled
