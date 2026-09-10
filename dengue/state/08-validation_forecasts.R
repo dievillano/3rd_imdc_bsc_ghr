@@ -1,41 +1,193 @@
-args <- commandArgs(trailingOnly = TRUE)
+# 08-validation_forecasts.R
 
-if (length(args) < 1) {
-  stop("Usage: Rscript <script_name>.R <split_id>")
+
+# =============================================================================
+# 0. Arguments
+# =============================================================================
+
+args <- commandArgs(
+  trailingOnly = TRUE
+)
+
+if (length(args) < 1L) {
+  stop(
+    "Usage: Rscript <script_name>.R <split_id>"
+  )
 }
 
-split_id <- as.integer(args[[1]])
+split_id <- as.integer(
+  args[[1]]
+)
 
 if (is.na(split_id)) {
-  stop("split_id must be an integer.")
+  stop(
+    "split_id must be an integer."
+  )
 }
+
+
+# =============================================================================
+# 1. Hub R-INLA setup
+# =============================================================================
+#
+# On bsceshub07, load the R-INLA module before running this script:
+#
+#   module load R-INLA/24.10.07-2-foss-2023b
+#
+# The module exposes its R library through EBROOTRMININLA.
+# =============================================================================
+
+inla_lib <- Sys.getenv(
+  "EBROOTRMININLA"
+)
+
+if (!nzchar(inla_lib)) {
+  stop(
+    paste0(
+      "EBROOTRMININLA is not set. ",
+      "Load the R-INLA module before running this script."
+    )
+  )
+}
+
+if (
+  !dir.exists(
+    file.path(
+      inla_lib,
+      "INLA"
+    )
+  )
+) {
+  stop(
+    "INLA package directory not found under: ",
+    inla_lib
+  )
+}
+
+.libPaths(
+  c(
+    inla_lib,
+    .libPaths()
+  )
+)
+
+cat(
+  "\nINLA library: ",
+  find.package(
+    "INLA"
+  ),
+  "\n",
+  "INLA version: ",
+  as.character(
+    packageVersion(
+      "INLA"
+    )
+  ),
+  "\n\n",
+  sep = ""
+)
+
+
+# =============================================================================
+# 2. Paths
+# =============================================================================
 
 sprint2026_path <- here::here()
 
-data_path <- fs::path(sprint2026_path, "data")
-processed_data_path <- fs::path(data_path, "processed/health_region")
-processed_graph_path <- fs::path(processed_data_path, "graph")
-external_splits_path <- fs::path(processed_data_path, "external_splits")
-
-dengue_path <- fs::path(sprint2026_path, "dengue/state")
-outputs_path <- fs::path(dengue_path, "outputs")
-predictions_path <- fs::path(outputs_path, "val_predictions")
-
-fs::dir_create(predictions_path)
-
-utils_path <- fs::path(sprint2026_path, "utils")
-utils_filepaths <- fs::dir_ls(utils_path)
-purrr::walk(utils_filepaths, source)
-
-setup_hpc_library()
-
-# 1. Read splits ----------------------------------------------------------
-
-external_splits <- readRDS(
-  fs::path(external_splits_path, "dengue_hr_external_splits.rds")
+data_path <- fs::path(
+  sprint2026_path,
+  "data"
 )
 
-# 2. Model variables ------------------------------------------------------
+processed_data_path <- fs::path(
+  data_path,
+  "processed/health_region"
+)
+
+processed_graph_path <- fs::path(
+  processed_data_path,
+  "graph"
+)
+
+external_splits_path <- fs::path(
+  processed_data_path,
+  "external_splits"
+)
+
+dengue_path <- fs::path(
+  sprint2026_path,
+  "dengue/state"
+)
+
+outputs_path <- fs::path(
+  dengue_path,
+  "outputs"
+)
+
+predictions_path <- fs::path(
+  outputs_path,
+  "val_predictions"
+)
+
+fs::dir_create(
+  predictions_path
+)
+
+
+# =============================================================================
+# 3. Utilities
+# =============================================================================
+
+utils_path <- fs::path(
+  sprint2026_path,
+  "utils"
+)
+
+utils_filepaths <- fs::dir_ls(
+  utils_path
+)
+
+purrr::walk(
+  utils_filepaths,
+  source
+)
+
+# setup_hpc_library()
+
+
+# =============================================================================
+# 4. Read splits
+# =============================================================================
+
+external_splits <- readRDS(
+  fs::path(
+    external_splits_path,
+    "dengue_hr_external_splits.rds"
+  )
+)
+
+if (
+  !split_id %in% seq_along(
+    external_splits
+  )
+) {
+  stop(
+    "Invalid split_id: ",
+    split_id,
+    ". Available splits: ",
+    paste(
+      seq_along(
+        external_splits
+      ),
+      collapse = ", "
+    )
+  )
+}
+
+
+# =============================================================================
+# 5. Model variables
+# =============================================================================
 
 climate_predictors <- c(
   "tasan6.l1",
@@ -45,14 +197,26 @@ climate_predictors <- c(
   "oni.l6"
 )
 
-# 3. Formula environment --------------------------------------------------
+
+# =============================================================================
+# 6. Formula environment
+# =============================================================================
 
 hr_graph <- INLA::inla.read.graph(
-  fs::path(processed_graph_path, "hr_graph.graph")
+  fs::path(
+    processed_graph_path,
+    "hr_graph.graph"
+  )
 )
 
 prec_prior <- list(
-  prec = list(prior = "pc.prec", param = c(0.5, 0.01))
+  prec = list(
+    prior = "pc.prec",
+    param = c(
+      0.5,
+      0.01
+    )
+  )
 )
 
 formula_env <- rlang::env(
@@ -70,12 +234,9 @@ re_w <- paste(
   "constr = TRUE, scale.model = TRUE, hyper = prec_prior)"
 )
 
-re_y <- "f(year_id, model = 'iid', hyper = prec_prior)"
-
-# NOTE:
-# This is an INLA-style approximation of the previous GHRmodel formula.
-# If you already have cov_varying() / cov_nl() translated to INLA strings,
-# replace this block with those exact terms.
+re_y <- paste(
+  "f(year_id, model = 'iid', hyper = prec_prior)"
+)
 
 formula_string <- paste(
   "cases ~ 1",
@@ -87,17 +248,19 @@ formula_string <- paste(
   sep = " + "
 )
 
-# 4. Run selected external split -----------------------------------------
 
-if (!split_id %in% seq_along(external_splits)) {
-  stop(
-    "Invalid split_id: ", split_id,
-    ". Available splits: ",
-    paste(seq_along(external_splits), collapse = ", ")
-  )
-}
+# =============================================================================
+# 7. Run selected external split
+# =============================================================================
 
-cat("\nRunning external split ", split_id, "\n", sep = "")
+cat(
+  "\n============================================================\n",
+  "RUNNING EXTERNAL VALIDATION SPLIT ",
+  split_id,
+  "\n",
+  "============================================================\n",
+  sep = ""
+)
 
 out_file <- fit_forecast_inla_split(
   split = external_splits[[split_id]],
@@ -110,4 +273,15 @@ out_file <- fit_forecast_inla_split(
   model_label = "Legacy model"
 )
 
-cat("\nSaved prediction file reference:\n", out_file, "\n", sep = "")
+cat(
+  "\n============================================================\n",
+  "VALIDATION SPLIT COMPLETE\n",
+  "============================================================\n",
+  "Split: ",
+  split_id,
+  "\n",
+  "Saved prediction file:\n",
+  out_file,
+  "\n",
+  sep = ""
+)
