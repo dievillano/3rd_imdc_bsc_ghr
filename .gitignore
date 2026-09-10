@@ -29,3 +29,7 @@ climate/temp_files/
 
 # HTML outputs
 *.html
+
+# Report
+_freeze/
+_site/

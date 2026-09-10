@@ -1,0 +1,646 @@
+---
+title: "3rd IMDC 2026 Dengue Forecasts"
+subtitle: "Validation and production forecast report"
+author: "BSC-GHR"
+date: last-modified
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    smooth-scroll: true
+    code-fold: true
+    code-summary: "Show code"
+    fig-responsive: true
+    self-contained: false
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+required_packages <- c(
+  "dplyr", "purrr", "ggplot2", "forcats", "scales", "fs", "gt", "readr"
+)
+
+missing_packages <- required_packages[
+  !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
+]
+
+if (length(missing_packages) > 0L) {
+  stop(
+    "Missing packages: ",
+    paste(missing_packages, collapse = ", "),
+    ". Install them before rendering the report."
+  )
+}
+
+library(dplyr)
+library(purrr)
+library(ggplot2)
+library(forcats)
+library(scales)
+library(fs)
+library(gt)
+
+# Find the Git repository root so this report can live in a subdirectory.
+repo_root <- tryCatch(
+  system2("git", c("rev-parse", "--show-toplevel"), stdout = TRUE, stderr = FALSE),
+  error = function(e) character()
+)
+
+if (length(repo_root) != 1L || !dir.exists(repo_root)) {
+  stop("Could not identify the sprint2026 Git repository root.")
+}
+
+repo_root <- normalizePath(repo_root)
+
+validation_predictions_path <- fs::path(
+  repo_root,
+  "dengue", "state", "outputs", "val_predictions"
+)
+
+validation_files <- fs::path(
+  validation_predictions_path,
+  paste0("split_", 1:4, "_legacy_model.rds")
+)
+
+production_state_path <- fs::path(
+  repo_root,
+  "dengue", "state", "outputs", "production",
+  "legacy_model_state_predictions.rds"
+)
+
+model_commit <- "54002fa44dbee5a38e7c7fd97107b11d1d945fe7"
+
+# Brazil geofacet grid ------------------------------------------------------
+# Define the grid explicitly rather than relying on geofacet's bundled
+# `br_states_grid1` object. Some geofacet installations list that grid but
+# fail to load the underlying object during rendering.
+br_states_grid <- data.frame(
+  row = c(1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 4, 5, 5, 6, 7, 6, 6, 7, 8),
+  col = c(2, 3, 2, 3, 4, 5, 1, 3, 4, 5, 6, 2, 2, 5, 6, 3, 3, 4, 4, 5, 2, 5, 3, 3, 4, 4, 3),
+  code = c(
+    "RR", "AP", "AM", "PA", "MA", "CE", "AC", "TO", "PI",
+    "PB", "RN", "RO", "MT", "PE", "AL", "GO", "DF", "MG",
+    "BA", "SE", "MS", "ES", "PR", "SP", "RJ", "SC", "RS"
+  ),
+  name = c(
+    "Roraima", "Amapá", "Amazonas", "Pará", "Maranhão", "Ceará",
+    "Acre", "Tocantins", "Piauí", "Paraíba", "Rio Grande do Norte",
+    "Rondônia", "Mato Grosso", "Pernambuco", "Alagoas", "Goiás",
+    "Distrito Federal", "Minas Gerais", "Bahia", "Sergipe",
+    "Mato Grosso do Sul", "Espírito Santo", "Paraná", "São Paulo",
+    "Rio de Janeiro", "Santa Catarina", "Rio Grande do Sul"
+  ),
+  stringsAsFactors = FALSE
+)
+
+# ---- Helpers -------------------------------------------------------------
+
+sum_observed <- function(x) {
+  if (all(is.na(x))) NA_real_ else sum(x, na.rm = TRUE)
+}
+
+sum_draws <- function(x) {
+  if (length(x) == 0L) {
+    stop("Cannot aggregate an empty set of posterior predictive draws.")
+  }
+  Reduce(`+`, x)
+}
+
+add_intervals <- function(data) {
+  data |>
+    dplyr::mutate(
+      pred = purrr::map_dbl(.pred_samples, ~ stats::median(.x, na.rm = TRUE)),
+      lower_50 = purrr::map_dbl(.pred_samples, ~ stats::quantile(.x, 0.25,  na.rm = TRUE, names = FALSE)),
+      upper_50 = purrr::map_dbl(.pred_samples, ~ stats::quantile(.x, 0.75,  na.rm = TRUE, names = FALSE)),
+      lower_80 = purrr::map_dbl(.pred_samples, ~ stats::quantile(.x, 0.10,  na.rm = TRUE, names = FALSE)),
+      upper_80 = purrr::map_dbl(.pred_samples, ~ stats::quantile(.x, 0.90,  na.rm = TRUE, names = FALSE)),
+      lower_90 = purrr::map_dbl(.pred_samples, ~ stats::quantile(.x, 0.05,  na.rm = TRUE, names = FALSE)),
+      upper_90 = purrr::map_dbl(.pred_samples, ~ stats::quantile(.x, 0.95,  na.rm = TRUE, names = FALSE)),
+      lower_95 = purrr::map_dbl(.pred_samples, ~ stats::quantile(.x, 0.025, na.rm = TRUE, names = FALSE)),
+      upper_95 = purrr::map_dbl(.pred_samples, ~ stats::quantile(.x, 0.975, na.rm = TRUE, names = FALSE))
+    )
+}
+
+aggregate_predictions <- function(data, group_vars, include_observed = TRUE) {
+  if (!".pred_samples" %in% names(data)) {
+    stop("`.pred_samples` is required for draw-by-draw aggregation.")
+  }
+
+  has_observed <- include_observed && "cases" %in% names(data)
+
+  out <- data |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) |>
+    dplyr::summarise(
+      .pred_samples = list(sum_draws(.pred_samples)),
+      cases = if (has_observed) sum_observed(cases) else NA_real_,
+      .groups = "drop"
+    )
+
+  add_intervals(out)
+}
+
+validation_metrics <- function(data, level) {
+  data |>
+    dplyr::group_by(.split_id) |>
+    dplyr::summarise(
+      level = level,
+      n = dplyr::n(),
+      mae = mean(abs(pred - cases), na.rm = TRUE),
+      rmse = sqrt(mean((pred - cases)^2, na.rm = TRUE)),
+      coverage_50 = mean(cases >= lower_50 & cases <= upper_50, na.rm = TRUE),
+      coverage_80 = mean(cases >= lower_80 & cases <= upper_80, na.rm = TRUE),
+      coverage_90 = mean(cases >= lower_90 & cases <= upper_90, na.rm = TRUE),
+      coverage_95 = mean(cases >= lower_95 & cases <= upper_95, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    dplyr::relocate(level, .after = .split_id)
+}
+
+plot_forecast <- function(data, observed = FALSE, title = NULL, subtitle = NULL) {
+  p <- ggplot(data, aes(x = date)) +
+    geom_ribbon(
+      aes(ymin = lower_95, ymax = upper_95),
+      fill = "#3B82F6", alpha = 0.12
+    ) +
+    geom_ribbon(
+      aes(ymin = lower_80, ymax = upper_80),
+      fill = "#3B82F6", alpha = 0.18
+    ) +
+    geom_ribbon(
+      aes(ymin = lower_50, ymax = upper_50),
+      fill = "#3B82F6", alpha = 0.28
+    ) +
+    geom_line(aes(y = pred), colour = "#1D4ED8", linewidth = 0.65)
+
+  if (observed) {
+    p <- p + geom_line(aes(y = cases), colour = "black", linewidth = 0.55)
+  }
+
+  p +
+    scale_y_continuous(
+      labels = scales::label_comma(),
+      expand = expansion(mult = c(0.01, 0.08))
+    ) +
+    scale_x_date(date_labels = "%Y-%m", date_breaks = "3 months") +
+    labs(
+      title = title,
+      subtitle = subtitle,
+      x = NULL,
+      y = "Weekly dengue cases",
+      caption = if (observed) {
+        "Blue: predictive median; black: observed cases. Shading: 50%, 80%, and 95% posterior predictive intervals."
+      } else {
+        "Blue: predictive median. Shading: 50%, 80%, and 95% posterior predictive intervals."
+      }
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      plot.title.position = "plot",
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.caption = element_text(hjust = 0)
+    )
+}
+
+plot_states <- function(data, observed = FALSE, title = NULL) {
+  p <- plot_forecast(data, observed = observed, title = title) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 6.5),
+      axis.text.y = element_text(size = 6.5),
+      strip.text = element_text(size = 8),
+      plot.caption = element_text(size = 8)
+    )
+
+  if (requireNamespace("geofacet", quietly = TRUE)) {
+    p + geofacet::facet_geo(
+      ~ uf,
+      grid = br_states_grid,
+      label = "name",
+      scales = "free_y"
+    )
+  } else {
+    p + facet_wrap(~ uf, scales = "free_y", ncol = 5)
+  }
+}
+```
+
+```{r}
+#| label: load-and-aggregate
+#| include: false
+
+# Validation predictions ---------------------------------------------------
+
+missing_validation_files <- validation_files[!file.exists(validation_files)]
+
+if (length(missing_validation_files) > 0L) {
+  stop(
+    "Validation prediction file(s) not found: ",
+    paste(missing_validation_files, collapse = ", ")
+  )
+}
+
+# Each split RDS contains health-region-level observations and posterior
+# predictive draws generated during the validation forecast run.
+validation_hr <- purrr::map_dfr(
+  validation_files,
+  readRDS
+) |>
+  dplyr::mutate(
+    .split_id = as.integer(.split_id),
+    uf_code = as.integer(uf_code),
+    date = as.Date(date)
+  )
+
+if (!".pred_samples" %in% names(validation_hr)) {
+  stop(
+    "Validation RDS files do not contain `.pred_samples`; ",
+    "draw-by-draw aggregation cannot be performed."
+  )
+}
+
+# Aggregate health-region predictive draws to state-week level, then to the
+# country-wide weekly level. Observed cases are summed at the same levels.
+validation_state <- aggregate_predictions(
+  validation_hr,
+  c(".split_id", "uf_code", "uf", "date"),
+  include_observed = TRUE
+) |>
+  dplyr::mutate(
+    split_label = factor(
+      paste("Split", .split_id),
+      levels = paste("Split", sort(unique(.split_id)))
+    )
+  )
+
+validation_country <- aggregate_predictions(
+  validation_hr,
+  c(".split_id", "date"),
+  include_observed = TRUE
+) |>
+  dplyr::mutate(
+    split_label = factor(
+      paste("Split", .split_id),
+      levels = paste("Split", sort(unique(.split_id)))
+    )
+  )
+
+# Production predictions ---------------------------------------------------
+
+if (!file.exists(production_state_path)) {
+  stop("Production state prediction file not found: ", production_state_path)
+}
+
+production_state <- readRDS(production_state_path) |>
+  dplyr::mutate(date = as.Date(date))
+
+if (!".pred_samples" %in% names(production_state)) {
+  stop(
+    "The production state RDS does not contain `.pred_samples`; ",
+    "country-wide uncertainty cannot be aggregated correctly."
+  )
+}
+
+# Recompute production summary quantiles from the stored joint predictive
+# draws so all production aggregates use the same draw-by-draw procedure.
+production_state <- add_intervals(production_state)
+
+production_country <- aggregate_predictions(
+  production_state,
+  "date",
+  include_observed = FALSE
+)
+
+# Production horizon-total distributions are summed draw-by-draw.
+production_state_totals <- aggregate_predictions(
+  production_state,
+  c("uf_code", "uf"),
+  include_observed = FALSE
+)
+
+production_country_total <- aggregate_predictions(
+  production_country,
+  character(0),
+  include_observed = FALSE
+)
+
+# Validation horizon-total distributions are also summed draw-by-draw.
+validation_country_totals <- aggregate_predictions(
+  validation_country,
+  ".split_id",
+  include_observed = TRUE
+)
+
+validation_rounds <- validation_country |>
+  dplyr::group_by(.split_id) |>
+  dplyr::summarise(
+    start = min(date),
+    end = max(date),
+    weeks = dplyr::n(),
+    .groups = "drop"
+  )
+
+metrics <- dplyr::bind_rows(
+  validation_metrics(validation_country, "Country-week"),
+  validation_metrics(validation_state, "State-week")
+) |>
+  dplyr::arrange(.split_id, level)
+```
+
+# Overview
+
+This report summarizes the **BSC-GHR legacy dengue model** used for the 3rd IMDC 2026 forecasting challenge. It brings the validation and production rounds into one report, with observed cases where available, predictive medians, and posterior predictive uncertainty intervals.
+
+::: {.callout-note}
+## Country-wide aggregation
+
+The country-wide series is the sum of the **26 federative units included in the submitted model**. Espírito Santo (UF 32) is not included, so the country-wide figures should be interpreted as the aggregate of the modelled units rather than a complete Brazil total.
+:::
+
+The production forecast covers **`r nrow(production_country)` weeks**, from **`r format(min(production_country$date), "%d %B %Y")`** to **`r format(max(production_country$date), "%d %B %Y")`**, with **`r length(production_state$.pred_samples[[1]])` posterior predictive draws** per state-week. The submitted model is tied to Git commit `r model_commit`.
+
+## Validation windows
+
+```{r}
+#| label: validation-windows
+
+validation_rounds |>
+  dplyr::mutate(
+    split = paste("Split", .split_id),
+    start = format(start, "%Y-%m-%d"),
+    end = format(end, "%Y-%m-%d")
+  ) |>
+  dplyr::select(split, start, end, weeks) |>
+  gt::gt() |>
+  gt::cols_label(
+    split = "Validation round",
+    start = "Start",
+    end = "End",
+    weeks = "Weeks"
+  ) |>
+  gt::tab_options(table.width = gt::pct(75))
+```
+
+# Validation results
+
+## Predictive performance
+
+The table reports point accuracy for the predictive median and empirical coverage of the predictive intervals. Country-week metrics evaluate the aggregate of the modelled units; state-week metrics pool all state-week observations within each validation round.
+
+```{r}
+#| label: validation-metrics
+
+metrics |>
+  dplyr::mutate(
+    split = paste("Split", .split_id),
+    mae = round(mae, 1),
+    rmse = round(rmse, 1),
+    dplyr::across(dplyr::starts_with("coverage_"), ~ round(100 * .x, 1))
+  ) |>
+  dplyr::select(
+    split, level, n, mae, rmse,
+    coverage_50, coverage_80, coverage_90, coverage_95
+  ) |>
+  gt::gt(groupname_col = "split") |>
+  gt::cols_label(
+    level = "Level",
+    n = "N",
+    mae = "MAE",
+    rmse = "RMSE",
+    coverage_50 = "50% coverage",
+    coverage_80 = "80% coverage",
+    coverage_90 = "90% coverage",
+    coverage_95 = "95% coverage"
+  ) |>
+  gt::fmt_number(columns = c(mae, rmse), decimals = 1) |>
+  gt::fmt_number(
+    columns = dplyr::starts_with("coverage_"),
+    decimals = 1,
+    pattern = "{x}%"
+  )
+```
+
+## Country-wide validation
+
+```{r}
+#| label: validation-country
+#| fig-width: 11
+#| fig-height: 7
+
+plot_forecast(validation_country, observed = TRUE) +
+  facet_wrap(~ split_label, ncol = 2, scales = "free_x") +
+  labs(
+    title = "Country-wide validation forecasts",
+    subtitle = "Health-region posterior predictive draws aggregated draw-by-draw"
+  )
+```
+
+## Total cases over each validation horizon
+
+The table compares observed and predicted total cases over each validation horizon. Predictive intervals are calculated by summing the posterior predictive draws across all modelled health regions and weeks before taking quantiles.
+
+```{r}
+#| label: validation-total-table
+
+validation_country_totals |>
+  dplyr::mutate(
+    split = paste("Split", .split_id),
+    observed = round(cases),
+    median = round(pred),
+    interval_95 = paste0(
+      scales::comma(round(lower_95)),
+      " – ",
+      scales::comma(round(upper_95))
+    )
+  ) |>
+  dplyr::select(split, observed, median, interval_95) |>
+  gt::gt() |>
+  gt::cols_label(
+    split = "Validation round",
+    observed = "Observed cases",
+    median = "Predicted median",
+    interval_95 = "95% predictive interval"
+  ) |>
+  gt::fmt_number(columns = c(observed, median), decimals = 0, use_seps = TRUE)
+```
+
+## State-level validation
+
+The vertical scale is allowed to vary by state so that both high- and low-incidence states remain readable.
+
+::: {.panel-tabset}
+
+### Split 1
+
+```{r}
+#| label: validation-state-1
+#| fig-width: 13
+#| fig-height: 11
+
+plot_states(
+  validation_state |> dplyr::filter(.split_id == 1L),
+  observed = TRUE,
+  title = "Validation split 1"
+)
+```
+
+### Split 2
+
+```{r}
+#| label: validation-state-2
+#| fig-width: 13
+#| fig-height: 11
+
+plot_states(
+  validation_state |> dplyr::filter(.split_id == 2L),
+  observed = TRUE,
+  title = "Validation split 2"
+)
+```
+
+### Split 3
+
+```{r}
+#| label: validation-state-3
+#| fig-width: 13
+#| fig-height: 11
+
+plot_states(
+  validation_state |> dplyr::filter(.split_id == 3L),
+  observed = TRUE,
+  title = "Validation split 3"
+)
+```
+
+### Split 4
+
+```{r}
+#| label: validation-state-4
+#| fig-width: 13
+#| fig-height: 11
+
+plot_states(
+  validation_state |> dplyr::filter(.split_id == 4L),
+  observed = TRUE,
+  title = "Validation split 4"
+)
+```
+
+:::
+
+# Production forecast
+
+## Country-wide forecast
+
+```{r}
+#| label: production-country
+#| fig-width: 10
+#| fig-height: 5.5
+
+plot_forecast(
+  production_country,
+  observed = FALSE,
+  title = "Country-wide production forecast",
+  subtitle = "Aggregate of the 26 modelled federative units"
+)
+```
+
+Across the full forecast horizon, the model projects a median of **`r scales::comma(round(production_country_total$pred))` cases**, with a **95% posterior predictive interval of `r scales::comma(round(production_country_total$lower_95))`–`r scales::comma(round(production_country_total$upper_95))` cases**, for the 26 modelled units combined.
+
+## State forecasts
+
+```{r}
+#| label: production-states
+#| fig-width: 13
+#| fig-height: 11
+
+plot_states(
+  production_state,
+  observed = FALSE,
+  title = "State-level production forecasts"
+)
+```
+
+## Projected burden by state
+
+This figure summarizes total cases over the full forecast horizon. The intervals are again calculated from draw-by-draw sums across weeks.
+
+```{r}
+#| label: production-state-total-plot
+#| fig-width: 9
+#| fig-height: 8
+
+production_state_totals |>
+  dplyr::mutate(uf = forcats::fct_reorder(uf, pred)) |>
+  ggplot(aes(x = uf, y = pred)) +
+  geom_linerange(
+    aes(ymin = lower_95, ymax = upper_95),
+    linewidth = 0.45,
+    colour = "#93C5FD"
+  ) +
+  geom_linerange(
+    aes(ymin = lower_50, ymax = upper_50),
+    linewidth = 2.2,
+    colour = "#3B82F6"
+  ) +
+  geom_point(size = 2, colour = "#1D4ED8") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::label_comma()) +
+  labs(
+    title = "Projected dengue cases over the forecast horizon",
+    subtitle = "Point: median; thick line: 50% interval; thin line: 95% interval",
+    x = NULL,
+    y = "Total forecast cases"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(panel.grid.minor = element_blank())
+```
+
+```{r}
+#| label: production-state-total-table
+
+production_state_totals |>
+  dplyr::arrange(dplyr::desc(pred)) |>
+  dplyr::mutate(
+    median = round(pred),
+    interval_95 = paste0(
+      scales::comma(round(lower_95)),
+      " – ",
+      scales::comma(round(upper_95))
+    )
+  ) |>
+  dplyr::select(uf, median, interval_95) |>
+  gt::gt() |>
+  gt::cols_label(
+    uf = "State",
+    median = "Median total cases",
+    interval_95 = "95% predictive interval"
+  ) |>
+  gt::fmt_number(columns = median, decimals = 0, use_seps = TRUE)
+```
+
+# Model and aggregation notes
+
+The submitted model is a negative-binomial R-INLA model fitted at the **health-region × epidemiological-week** level with population as the exposure. The legacy specification includes a BYM2 spatial effect for health region, a state-specific cyclic RW2 seasonal effect, an iid year effect, climate covariates, and the selected climate interactions.
+
+Forecasts are generated from posterior predictive draws at health-region level and aggregated **draw-by-draw** to states. For both the **validation rounds** and the **production forecast**, country-wide and forecast-horizon summaries in this report are constructed by summing corresponding draws before calculating medians and uncertainty intervals. This preserves the dependence represented by each joint posterior predictive draw.
+
+# Reproducibility
+
+- **Repository:** `dievillano/3rd_imdc_bsc_ghr`
+- **Forecast commit:** `r model_commit`
+- **Validation predictions:** `dengue/state/outputs/val_predictions/split_[1-4]_legacy_model.rds`
+- **Production source:** `dengue/state/outputs/production/legacy_model_state_predictions.rds`
+- **Report generated:** `r format(Sys.time(), "%Y-%m-%d %H:%M %Z")`
+
+```{r}
+#| label: session-info
+#| collapse: true
+
+sessionInfo()
+```

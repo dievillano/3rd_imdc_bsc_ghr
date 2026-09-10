@@ -1,0 +1,18 @@
+project:
+  type: website
+
+website:
+  title: "3rd IMDC 2026 Dengue Forecasts"
+  page-navigation: true
+  repo-url: https://github.com/dievillano/3rd_imdc_bsc_ghr
+  repo-actions: [source]
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: true
+    code-tools: true
+
+execute:
+  freeze: auto

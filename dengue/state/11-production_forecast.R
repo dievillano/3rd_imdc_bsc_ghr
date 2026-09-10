@@ -1228,7 +1228,8 @@ out <- fit_forecast_inla(
   forecast_data = forecast_model,
   outcome = "cases",
   family = "nbinomial",
-  offset = "pop100k",
+  exposure = "pop100k",
+  offset = NULL,
   nthreads_inla = as.integer(
     Sys.getenv(
       "SLURM_CPUS_PER_TASK",
