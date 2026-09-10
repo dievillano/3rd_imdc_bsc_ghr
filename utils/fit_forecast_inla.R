@@ -334,17 +334,17 @@ fit_forecast_inla <- function(
   }
   
   
-  if (!".lead_month" %in% names(pred)) {
-    
+  if (!".lead_week" %in% names(pred)) {
+  
     if (!date_col %in% names(pred)) {
       rlang::abort(
         "`date_col` was not found in the prediction data."
       )
     }
-    
+  
     pred <- pred |>
       dplyr::mutate(
-        .lead_month = dplyr::dense_rank(
+        .lead_week = dplyr::dense_rank(
           .data[[date_col]]
         )
       )
