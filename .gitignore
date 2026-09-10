@@ -33,3 +33,5 @@ climate/temp_files/
 # Report
 _freeze/
 _site/
+/.quarto/
+**/*.quarto_ipynb
